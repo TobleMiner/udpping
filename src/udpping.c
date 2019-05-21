@@ -19,10 +19,15 @@
 
 bool do_exit = false;
 
+const int ONE = 1;
+const int val_IP_PMTUDISC_DO = IP_PMTUDISC_DO;
+const int val_IPV6_PMTUDISC_DO = IPV6_PMTUDISC_DO;
+
 void show_usage(char* bin_name)
 {
-	fprintf(stderr, "USAGE: %s [-c IP-ADDRESS] [-p PORT] [-i TIMEOUT] [-s PACKET_SIZE]\n", bin_name);
-	fprintf(stderr, "-c: Client mode, IP-ADDRESS is address of device running %s in server mode\n", bin_name);
+	fprintf(stderr, "USAGE: %s [-c IP-ADDRESS] [-p PORT] [-i TIMEOUT] [-s PACKET_SIZE] [-l LISTEN-ADDRESS] [-d]\n", bin_name);
+	fprintf(stderr, "-c: Client mode, IP-ADDRESS is address of device running %s in server mode\n");
+	fprintf(stderr, "-d: Don't fragment\n");
 }
 
 void doshutdown(int signal)
@@ -53,8 +58,9 @@ int main(int argc, char** argv)
 	const struct addrinfo hints_v4 = { .ai_family = AF_INET };
 	const struct addrinfo hints_v6 = { .ai_family = AF_INET6 };
 	const struct addrinfo* hint = NULL;
+	bool dont_fragment = false;
 
-	while((opt = getopt(argc, argv, "46c:l:p:i:s:h")) != -1)
+	while((opt = getopt(argc, argv, "46dc:l:p:i:s:h")) != -1)
 	{
 		switch(opt)
 		{
@@ -63,6 +69,9 @@ int main(int argc, char** argv)
 				break;
 			case '6':
 				hint = &hints_v6;
+				break;
+			case 'd':
+				dont_fragment = true;
 				break;
 			case 'c':
 				client = optarg;
@@ -134,6 +143,15 @@ int main(int argc, char** argv)
 	timeout.tv_sec = 0;
 	timeout.tv_usec = interval * 1000;
 	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+	if(client && dont_fragment) {
+		if(client_addr->ss_family == AF_INET) {
+			setsockopt(sock, IPPROTO_IP, IP_MTU_DISCOVER, &val_IP_PMTUDISC_DO, sizeof(val_IP_PMTUDISC_DO));
+		} else {
+			setsockopt(sock, IPPROTO_IPV6, IPV6_MTU_DISCOVER, &val_IPV6_PMTUDISC_DO, sizeof(val_IPV6_PMTUDISC_DO));
+			setsockopt(sock, IPPROTO_IPV6, IPV6_DONTFRAG, &ONE, sizeof(ONE));
+		}
+	}
 
 	// Set signal handler
 	if(signal(SIGINT, doshutdown))
